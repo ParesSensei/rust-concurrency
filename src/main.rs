@@ -1,5 +1,8 @@
+use std::thread;
+
 fn main() {
-    println!("Hello, world!");
+    let curren_thread = thread::current();
+    println!("{} : Hello, world!", curren_thread.name().unwrap());
 }
 
 #[cfg(test)]
@@ -47,8 +50,12 @@ mod tests {
 
     fn calculate() -> i32 {
         let mut counter = 0 ;
+        let current = thread::current();
         for i in 1..=5 {
-            println!("Counter : {}", i);
+            match current.name() {
+                None => { println!("{:?} : Counter : {}", current.id(), i); }
+                Some(name) => { println!("{} : Counter : {}", name, i); }
+            }
             thread::sleep(Duration::from_secs(1));
             counter += 1;
         }
@@ -83,5 +90,126 @@ mod tests {
         }
 
         println!("Application finish")
+    }
+
+    #[test]
+    fn test_closure() {
+        let curren_thread = thread::current();
+        println!("Current thread: {}", curren_thread.name().unwrap());
+
+
+        let name = String::from("Eko");
+        let closure = move || {
+            thread::sleep(Duration::from_secs(2));
+            println!("Hello {}", name);
+        };
+
+        let handle = thread::spawn(closure);
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_thread_factory() {
+        let factory = thread::Builder::new().name("My thread".to_string());
+
+        let handle = factory.spawn(calculate).expect("Failed to create a new thread");
+        let total = handle.join().unwrap();
+
+        println!("Total counter : {}", total);
+    }
+
+    #[test]
+    fn test_channel() {
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+
+        let handle1 = thread::spawn(move || {
+           thread::sleep(Duration::from_secs(2));
+            sender.send("Hello from thread!".to_string())
+        });
+
+        let handle2 = thread::spawn(move || {
+            let message = receiver.recv().unwrap();
+            println!("{}", message);
+        });
+
+        let _ = handle1.join();
+        let _ = handle2.join();
+    }
+
+    #[test]
+    fn test_channel_queue() {
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+
+        let handle1 = thread::spawn(move || {
+            for i in 0..5 {
+                thread::sleep(Duration::from_secs(2));
+                sender.send("Hello from thread!".to_string());
+            }
+            sender.send("Exit".to_string());
+        });
+
+        let handle2 = thread::spawn(move || {
+            loop {
+                let message = receiver.recv().unwrap();
+                if message == "Exit" {
+                    break;
+                }
+                println!("{}", message);
+            }
+        });
+
+        let _ = handle1.join();
+        let _ = handle2.join();
+    }
+
+    #[test]
+    fn test_channel_iterator() {
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+
+        let handle1 = thread::spawn(move || {
+            for i in 0..5 {
+                thread::sleep(Duration::from_secs(2));
+                sender.send("Hello from thread!".to_string());
+            }
+        });
+
+        let handle2 = thread::spawn(move || {
+            for value in receiver.iter() {
+                println!("{}", value);
+            }
+        });
+
+        let _ = handle1.join();
+        let _ = handle2.join();
+    }
+
+    #[test]
+    fn test_channel_multi_sender() {
+        let (sender, receiver) = std::sync::mpsc::channel::<String>();
+        let sender2 = sender.clone();
+
+        let handle3 = thread::spawn(move || {
+            for i in 0..5 {
+                thread::sleep(Duration::from_secs(1));
+                sender2.send("Hello from sender2".to_string());
+            }
+        });
+
+        let handle1 = thread::spawn(move || {
+            for i in 0..5 {
+                thread::sleep(Duration::from_secs(2));
+                sender.send("Hello from sender1".to_string());
+            }
+        });
+
+        let handle2 = thread::spawn(move || {
+            for value in receiver.iter() {
+                println!("{}", value);
+            }
+        });
+
+        let _ = handle1.join();
+        let _ = handle2.join();
+        let _ = handle3.join();
     }
 }
