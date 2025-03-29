@@ -11,7 +11,7 @@ mod tests {
     use ::std::thread;
     use ::std::time::Duration;
     use std::sync::{Arc, Barrier, Once};
-    use std::thread::JoinHandle;
+    use std::thread::{spawn, JoinHandle};
 
     #[test]
     fn test_create_thread() {
@@ -305,6 +305,7 @@ mod tests {
     }
 
     use std::cell::{RefCell};
+    use tokio::runtime::Runtime;
 
     thread_local! {
         pub static NAME: RefCell<String> = RefCell::new("Default".to_string());
@@ -396,5 +397,67 @@ mod tests {
         for handle in handles {
             handle.join().unwrap();
         }
+    }
+
+    async fn get_async_data() -> String {
+        thread::sleep(Duration::from_secs(2));
+        println!("Hello from async");
+        return "Hello from async!".to_string();
+    }
+
+    #[tokio::test]
+    async fn test_async() {
+        let function = get_async_data();
+        println!("finish call async");
+        let data = function.await;
+        println!("{}", data);
+    }
+
+    async fn get_database_data(wait: u64) -> String {
+        println!("{:?} : get database data", thread::current().id());
+        tokio::time::sleep(Duration::from_secs(wait)).await;
+        println!("{:?} : get database data", thread::current().id());
+        return "Hello from database!".to_string();
+    }
+
+    #[tokio::test]
+    async fn test_concurrent() {
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let handle = tokio::spawn(get_database_data(i));
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let data= handle.await.unwrap();
+            println!("response : {}", data)
+        }
+    }
+
+    async fn run_concurrent(runtime: Arc<Runtime>) {
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let handle = runtime.spawn(get_database_data(i));
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let data= handle.await.unwrap();
+            println!("response : {}", data)
+        }
+    }
+
+    #[test]
+    fn test_runtime() {
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(10)
+                .enable_time()
+                .build().unwrap()
+        );
+
+        runtime.block_on(run_concurrent(Arc::clone(&runtime)));
     }
 }
