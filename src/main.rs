@@ -10,7 +10,7 @@ mod tests {
 
     use ::std::thread;
     use ::std::time::Duration;
-    use std::sync::Arc;
+    use std::sync::{Arc, Barrier, Once};
     use std::thread::JoinHandle;
 
     #[test]
@@ -331,5 +331,70 @@ mod tests {
         NAME.with_borrow(|name| {
             println!("hello : {}", name);
         });
+    }
+
+    #[test]
+    fn test_thread_panic() {
+        let handle = thread::spawn(|| {
+            panic!("Oops! something went wrong")
+        });
+
+        match handle.join() {
+            Ok(_) => println!("Thread Finish"),
+            Err(_) => println!("Thread panic"),
+        }
+
+        println!("Application finish")
+    }
+
+    #[test]
+    fn test_barrier() {
+        let barrier = Arc::new(Barrier::new(10));
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let barrier_clone = Arc::clone(&barrier);
+            let handle = thread::spawn(move || {
+                println!("Join game-{}", i);
+                barrier_clone.wait();
+                println!("Gamer-{} Start", i)
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    }
+
+    static mut TOTAL_COUNTER: i32 = 0;
+    static TOTAL_INIT: Once = Once::new();
+
+    fn get_total() -> i32 {
+        unsafe {
+          TOTAL_INIT.call_once(|| {
+              println!("Call once");
+              TOTAL_COUNTER += 1;
+          });
+          TOTAL_COUNTER
+        }
+    }
+
+    #[test]
+    fn test_once() {
+        let mut handles = vec![];
+
+        for _ in 0..10 {
+            let handle = thread::spawn(move|| {
+                let total = get_total();
+                println!("Total : {}", total);
+
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
     }
 }
