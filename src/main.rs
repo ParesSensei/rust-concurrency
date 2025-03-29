@@ -279,4 +279,57 @@ mod tests {
 
         println!("Counter : {}", counter.load(Ordering::Relaxed));
     }
+
+    #[test]
+    fn test_mutex() {
+        use std::sync::{Arc, Mutex};
+        let counter : Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let counter_clone = Arc::clone(&counter);
+            let handle = thread::spawn( move ||{
+                for _ in 0..1000000 {
+                    let mut data =counter_clone.lock().unwrap();
+                    *data += 1;
+                }
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        println!("Counter : {}", *counter.lock().unwrap());
+    }
+
+    use std::cell::{RefCell};
+
+    thread_local! {
+        pub static NAME: RefCell<String> = RefCell::new("Default".to_string());
+    }
+    thread_local! {
+        pub static OTHER_NAME: RefCell<String> = RefCell::new("Default".to_string());
+    }
+
+    #[test]
+    fn test_thread_local() {
+        let handle = thread::spawn(|| {
+            NAME.with_borrow_mut(|name| {
+                *name = "Budi".to_string()
+            });
+
+
+            NAME.with_borrow(|name| {
+                println!("hello : {}", name);
+            });
+        });
+
+        handle.join().unwrap();
+
+        NAME.with_borrow(|name| {
+            println!("hello : {}", name);
+        });
+    }
 }
